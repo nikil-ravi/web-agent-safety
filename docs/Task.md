@@ -29,7 +29,9 @@ Tasks are defined in JSON format with the following structure:
     }
   ],
   "points": 1,
-  "config": {}
+  "config": {
+    "html_tweak_script": "document.body.setAttribute('data-test','1');"
+  }
 }
 ```
 
@@ -46,6 +48,9 @@ Tasks are defined in JSON format with the following structure:
 - **challengeType**: Category of challenge ("retrieval", "generation", "navigation")
 - **evals**: Array of evaluation criteria that determine if the task was completed successfully
 - **points**: Points awarded for completing the task
+- **config**: Optional dictionary for task-specific options. To tweak the page HTML,
+  include an `html_tweak_script` string containing JavaScript to run before each
+  observation is collected.
 
 ## Evaluation Mechanisms
 
