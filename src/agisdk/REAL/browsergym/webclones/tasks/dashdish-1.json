@@ -18,6 +18,7 @@
         "rubric": "Does the answer include \"Gambinos New York Subs\", \"Wingstop\", and \"Man vs Fries\" as the first three restaurants?"
       }
     ],
-    "points": 1,
-    "config": {}
-  } 
+    "points": 1,    "config": {
+        "html_tweak_script": "document.body.setAttribute('data-test','1');"
+    }
+}

@@ -127,6 +127,7 @@ class AbstractWebCloneTask(AbstractBrowserTask):
         self.evaluator = WebCloneEvaluator(task_config=self.task_config)
         self.goal = self.task_config.get_goal()
         self.url = self.task_config.get_start_url()
+        self.html_tweak_script = self.task_config.get_html_tweak_script()
         if not self.url:
             if "WEBCLONE_URL" in os.environ:
                 self.url = os.environ["WEBCLONE_URL"]

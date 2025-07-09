@@ -150,6 +150,12 @@ class TaskConfig:
         :return: The goal as a string.
         """
         return self.task.goal
+
+    def get_html_tweak_script(self) -> str:
+        """Return optional JavaScript snippet for HTML tweaking."""
+        if self.task.config is None:
+            return ""
+        return self.task.config.get("html_tweak_script", "")
     
     def get_evals(self) -> str:
         """

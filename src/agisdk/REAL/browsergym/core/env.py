@@ -8,7 +8,7 @@ import time
 import json
 from abc import ABC
 from pathlib import Path
-from typing import Literal, Optional, Union
+from typing import Callable, Literal, Optional, Union
 
 import gymnasium as gym
 import numpy as np
@@ -34,6 +34,41 @@ from .spaces import AnyBox, AnyDict, Unicode
 from .task import AbstractBrowserTask
 
 logger = logging.getLogger(__name__)
+
+
+def default_html_tweak(page: playwright.sync_api.Page) -> None:
+    """Minimal adversarial tweak applied before exposing the page to the agent.
+
+    This default implementation simply inserts a hidden ``div`` element at the
+    end of the document body. It serves as an example for how HTML can be
+    modified without affecting page functionality.
+    """
+    try:
+        page.evaluate(
+            """
+            (() => {
+                const div = document.createElement('div');
+                div.id = 'browsergym-adversarial';
+                div.style.display = 'none';
+                div.textContent = 'adversarial tweak';
+                document.body.appendChild(div);
+            })();
+            """
+        )
+    except Exception as e:
+        logger.warning(f"HTML tweak failed: {e}")
+
+
+def script_html_tweak(script: str) -> Callable[[playwright.sync_api.Page], None]:
+    """Create an HTML tweak callback from a JavaScript snippet."""
+
+    def _tweak(page: playwright.sync_api.Page) -> None:
+        try:
+            page.evaluate(script)
+        except Exception as e:  # pragma: no cover - best effort logging
+            logger.warning(f"HTML tweak failed: {e}")
+
+    return _tweak
 
 
 def _try_to_extract_legacy_goal(goal: list):
@@ -81,6 +116,7 @@ class BrowserEnv(gym.Env, ABC):
         extensions_dir: Optional[str] = None,
         # agent-related arguments
         action_mapping: Optional[callable] = HighLevelActionSet().to_python_code,
+        html_tweak_fn: Optional[Callable[[playwright.sync_api.Page], None]] = default_html_tweak,
     ):
         """
         Instantiate a ready to use BrowserEnv gym environment.
@@ -101,6 +137,9 @@ class BrowserEnv(gym.Env, ABC):
             action_mapping: if set, the environment will use this function to map every received action to executable Python code.
             golden_user_data_dir: desired user data directory for persistent browser context. If provided, a copy of this directory will be used for the browser session. This allows reusing a pre-configured browser state (cookies, localStorage, etc).
             extensions_dir: directory containing Chrome extensions to load (can be a single extension directory or a directory of extensions). Requires persistent context and disables headless mode.
+            html_tweak_fn: function applied to the Playwright ``Page`` before each observation
+                is returned to the agent. Useful for adversarial testing. Defaults
+                to :func:`default_html_tweak`.
 
         """
         super().__init__()
@@ -121,6 +160,7 @@ class BrowserEnv(gym.Env, ABC):
         self.extensions_dir = extensions_dir
         self._temp_user_data_dir = None
         self.action_mapping = action_mapping
+        self.html_tweak_fn = html_tweak_fn
         self.active_agent_name = None # Add attribute to store agent name
 
         # check argument values
@@ -207,6 +247,13 @@ class BrowserEnv(gym.Env, ABC):
 
         # create a new task
         self.task = self.task_entrypoint(seed=seed, **self.task_kwargs)
+
+        # allow task configuration to override HTML tweak script if provided
+        if (
+            getattr(self.task, "html_tweak_script", None)
+            and (self.html_tweak_fn is None or self.html_tweak_fn is default_html_tweak)
+        ):
+            self.html_tweak_fn = script_html_tweak(self.task.html_tweak_script)
 
         def override_property(task, env, property):
             """Extract property value from env if not None, otherwise from task."""
@@ -422,6 +469,13 @@ document.addEventListener("visibilitychange", () => {
         # if asked, wait for user message
         self._wait_for_user_message()
 
+        # Apply optional HTML tweaks before giving the page to the agent
+        if self.html_tweak_fn:
+            try:
+                self.html_tweak_fn(self.page)
+            except Exception as e:
+                logger.warning(f"HTML tweak failed: {e}")
+
         # extract obs and info from environment
         obs = self._get_obs()
 
@@ -582,6 +636,13 @@ document.addEventListener("visibilitychange", () => {
         # add any user message sent by the task to the chat
         if user_message:
             self.chat.add_message(role="user", msg=user_message)
+
+        # Apply optional HTML tweaks before giving the page to the agent
+        if self.html_tweak_fn:
+            try:
+                self.html_tweak_fn(self.page)
+            except Exception as e:
+                logger.warning(f"HTML tweak failed: {e}")
 
         # extract observation (generic)
         obs = self._get_obs()
